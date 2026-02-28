@@ -1,14 +1,11 @@
 import streamlit as st
-import hashlib
+import hashlib, re
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 
-# --- 核心參數與函數 (確保與 Alice 完全相同) ---
-P = 6277101735386680763835789423207666416102355444464034512897
-A = 1
+P, A = 0xfffffffffffffffffffffffffffffffeffffffffffffffff, 1
 
 def inv(n, q): return pow(n, q - 2, q)
-
 def ec_add(P1, P2):
     if P1 is None: return P2
     if P2 is None: return P1
@@ -30,46 +27,29 @@ def ec_mul(k, P1):
         k //= 2
     return res
 
-st.title("🔓 Bob 最終修正版：解密端")
-
-db = st.number_input("1. 輸入 Bob 私鑰 (dB):", value=987654321)
-qa_x_str = st.text_input("2. 輸入 Alice 公鑰 X:")
-qa_y_str = st.text_input("3. 輸入 Alice 公鑰 Y:")
-package_hex = st.text_area("4. 貼上密文包 (Hex):")
+st.title("🔓 步驟四：Bob 解密訊息")
+db = st.number_input("輸入 Bob 私鑰 (dB):", value=987654321)
+qa_input = st.text_input("請貼上 Alice 的公鑰資料 (x, y):", placeholder="0x..., 0x...")
+package_hex = st.text_area("請貼上密文包 (Hex):")
 
 if st.button("執行解密"):
     try:
-        # 清理並轉換輸入
-        xa = int(qa_x_str.strip(), 16)
-        ya = int(qa_y_str.strip(), 16)
-        QA = (xa, ya)
+        parts = qa_input.split(',')
+        coords = [re.sub(r'[^0-9a-f]', '', s.lower()) for s in parts]
+        QA = (int(coords[0], 16), int(coords[1], 16))
         
-        # 1. 計算共同金鑰
         S = ec_mul(db, QA)
-        
-        # 2. 衍生 AES 金鑰 (這一步必須與 Alice 的加密程式完全死鎖一致)
-        # 建議統一：將 S[0] 轉為整數後轉成 bytes
         shared_key = hashlib.sha256(str(int(S[0])).encode()).digest()
         
-        # 3. 處理密文包 (去除可能存在的空格或 0x)
-        clean_package = package_hex.strip().lower().replace("0x", "").replace(" ", "").replace("\n", "")
-        raw_data = bytes.fromhex(clean_package)
+        cp = re.sub(r'[^0-9a-f]', '', package_hex.lower())
+        raw_data = bytes.fromhex(cp)
+        iv, ct = raw_data[:16], raw_data[16:]
         
-        iv = raw_data[:16]
-        ciphertext = raw_data[16:]
-        
-        # 4. AES 解密
         cipher = AES.new(shared_key, AES.MODE_CBC, iv)
-        decrypted = cipher.decrypt(ciphertext)
+        original = unpad(cipher.decrypt(ct), 16).decode('utf-8')
         
-        # 5. Unpad
-        original_msg = unpad(decrypted, 16).decode('utf-8')
-        
-        st.success(f"🔓 解密成功！還原訊息：{original_msg}")
-        st.write(f"🧬 共同金鑰校準值 Sx: {hex(S[0])}")
-
-    except ValueError as e:
-        st.error(f"❌ 格式錯誤：請確保輸入的是正確的十六進位數字。")
+        st.balloons()
+        st.success(f"🔓 解密成功！還原訊息：{original}")
+        st.write(f"🧬 驗證共同點 Sx: {hex(S[0])}")
     except Exception as e:
-        st.error(f"❌ 解密失敗：{str(e)}")
-        st.info("💡 提示：通常是因為私鑰輸入錯誤，導致生成的共同金鑰與加密端不符，請檢查 Alice 端顯示的 Sx 是否與此處一致。")
+        st.error(f"❌ 錯誤：{str(e)}")
