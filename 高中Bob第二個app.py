@@ -1,15 +1,15 @@
 import streamlit as st
 
-P = 6277101735386680763835789423207666416102355444464034512897
+P = 0xfffffffffffffffffffffffffffffffeffffffffffffffff
 A = 1
-G = (0x9780a221f584e62552f9f878f5a133240e53a39e832623b0, 
-     0x2401f7027b40939527ec56133299719364407f38072e9f06)
+G = (0x188da80eb03090f67cbf20eb43a18800f4ff0afd82ff1012, 
+     0x07192b95ffc8da78631011ed6b24cdd573f977a11e794811)
 
 def inv(n, q): return pow(n, q - 2, q)
 def ec_add(P1, P2):
     if P1 is None: return P2
     if P2 is None: return P1
-    x1, y1, x2, y2 = P1[0], P1[1], P2[0], P2[1]
+    x1, y1, x2, y2 = P1[0] % P, P1[1] % P, P2[0] % P, P2[1] % P
     if x1 == x2:
         if (y1 + y2) % P == 0: return None
         m = (3 * x1 * x1 + A) * inv(2 * y1, P) % P
@@ -27,9 +27,10 @@ def ec_mul(k, P1):
         k //= 2
     return res
 
-st.title("👤 Bob 公鑰生成器")
-db = st.number_input("請輸入 Bob 私鑰 (dB):", value=987654321)
-if st.button("生成 Bob 公鑰"):
+st.title("👤 步驟二：Bob 生成公鑰")
+db = st.number_input("【Bob】請輸入您的私鑰 (dB):", value=987654321)
+
+if st.button("產生公鑰資料"):
     QB = ec_mul(db, G)
-    st.success("計算完成！請將以下座標傳給 Alice：")
-    st.code(f"QB_X: {hex(QB[0])}\nQB_Y: {hex(QB[1])}") 
+    st.success("成功！請將下方整行文字複製並傳給 Alice：")
+    st.code(f"{hex(QB[0])}, {hex(QB[1])}")
