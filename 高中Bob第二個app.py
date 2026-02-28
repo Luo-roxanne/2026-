@@ -27,7 +27,7 @@ def ec_mul(k, P1):
         k //= 2
     return res
 
-   st.title("👤 Bob 公鑰生成器")
+st.title("👤 Bob 公鑰生成器")
 db = st.number_input("請輸入 Bob 私鑰 (dB):", value=987654321)
 if st.button("生成 Bob 公鑰"):
     QB = ec_mul(db, G)
