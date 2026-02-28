@@ -3,12 +3,11 @@ import hashlib
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 
-# --- 核心參數與函數 ---
+# --- 核心參數與函數 (確保與 Alice 完全相同) ---
 P = 6277101735386680763835789423207666416102355444464034512897
 A = 1
 
-def inv(n, q):
-    return pow(n, q - 2, q)
+def inv(n, q): return pow(n, q - 2, q)
 
 def ec_add(P1, P2):
     if P1 is None: return P2
@@ -24,63 +23,53 @@ def ec_add(P1, P2):
     return (x3, y3)
 
 def ec_mul(k, P1):
-    res = None
-    temp = P1
+    res, temp = None, P1
     while k > 0:
         if k % 2 == 1: res = ec_add(res, temp)
         temp = ec_add(temp, temp)
         k //= 2
     return res
 
-# --- 介面設計 ---
-st.title("🔓 程式四：Bob 訊息解密端 (修正版)")
-st.markdown("請確保輸入的公鑰與 Alice 端完全一致。")
+st.title("🔓 Bob 最終修正版：解密端")
 
-# 輸入區
-db = st.number_input("1. 輸入 Bob 的私鑰 (dB):", value=987654321)
-qa_x_input = st.text_input("2. 輸入 Alice 的公鑰 X (需含 0x):", placeholder="0x...")
-qa_y_input = st.text_input("3. 輸入 Alice 的公鑰 Y (需含 0x):", placeholder="0x...")
-package_input = st.text_area("4. 貼上收到的密文包 (Hex 字串):", placeholder="在此貼上長串十六進位數字...")
+db = st.number_input("1. 輸入 Bob 私鑰 (dB):", value=987654321)
+qa_x_str = st.text_input("2. 輸入 Alice 公鑰 X:")
+qa_y_str = st.text_input("3. 輸入 Alice 公鑰 Y:")
+package_hex = st.text_area("4. 貼上密文包 (Hex):")
 
 if st.button("執行解密"):
-    if not (qa_x_input and qa_y_input and package_input):
-        st.error("❌ 請填寫完整公鑰與密文包資訊！")
-    else:
-        try:
-            # 1. 處理輸入格式 (去除空格並轉為整數)
-            qa_x = int(qa_x_input.strip(), 16)
-            qa_y = int(qa_y_input.strip(), 16)
-            QA = (qa_x, qa_y)
-            
-            # 2. 計算共同金鑰 S = db * QA
-            S = ec_mul(db, QA)
-            if S is None:
-                st.error("❌ 計算出的共同點為無窮遠點，請檢查公鑰是否有誤。")
-            else:
-                # 3. 衍生 AES Key (與 Alice 端必須完全相同)
-                # 使用 S[0] 的字串進行 SHA256
-                shared_key = hashlib.sha256(str(S[0]).encode()).digest()
-                
-                # 4. 解析密文包 (前 16 bytes 是 IV，後面是密文)
-                raw_data = bytes.fromhex(package_input.strip())
-                if len(raw_data) < 16:
-                    st.error("❌ 密文包長度不足（需包含 16 位 IV）。")
-                else:
-                    iv_rec = raw_data[:16]
-                    ct_rec = raw_data[16:]
-                    
-                    # 5. AES 解密
-                    cipher = AES.new(shared_key, AES.MODE_CBC, iv_rec)
-                    decrypted_data = cipher.decrypt(ct_rec)
-                    
-                    # 6. 去除填充 (Unpad) 並轉碼
-                    original_msg = unpad(decrypted_data, 16).decode('utf-8')
-                    
-                    st.balloons()
-                    st.success(f"🎊 解密成功！")
-                    st.subheader(f"還原訊息：{original_msg}")
-                    st.write(f"🔐 驗證共同金鑰 Sx: {hex(S[0])}")
-                    
-        except Exception as e:
-            st.error(f"❌ 解密失敗！錯誤原因：{str(e)}")
-            st.info("💡 小撇步：請確認密文包是否完整複製，且私鑰與公鑰是否正確。")
+    try:
+        # 清理並轉換輸入
+        xa = int(qa_x_str.strip(), 16)
+        ya = int(qa_y_str.strip(), 16)
+        QA = (xa, ya)
+        
+        # 1. 計算共同金鑰
+        S = ec_mul(db, QA)
+        
+        # 2. 衍生 AES 金鑰 (這一步必須與 Alice 的加密程式完全死鎖一致)
+        # 建議統一：將 S[0] 轉為整數後轉成 bytes
+        shared_key = hashlib.sha256(str(int(S[0])).encode()).digest()
+        
+        # 3. 處理密文包 (去除可能存在的空格或 0x)
+        clean_package = package_hex.strip().lower().replace("0x", "").replace(" ", "").replace("\n", "")
+        raw_data = bytes.fromhex(clean_package)
+        
+        iv = raw_data[:16]
+        ciphertext = raw_data[16:]
+        
+        # 4. AES 解密
+        cipher = AES.new(shared_key, AES.MODE_CBC, iv)
+        decrypted = cipher.decrypt(ciphertext)
+        
+        # 5. Unpad
+        original_msg = unpad(decrypted, 16).decode('utf-8')
+        
+        st.success(f"🔓 解密成功！還原訊息：{original_msg}")
+        st.write(f"🧬 共同金鑰校準值 Sx: {hex(S[0])}")
+
+    except ValueError as e:
+        st.error(f"❌ 格式錯誤：請確保輸入的是正確的十六進位數字。")
+    except Exception as e:
+        st.error(f"❌ 解密失敗：{str(e)}")
+        st.info("💡 提示：通常是因為私鑰輸入錯誤，導致生成的共同金鑰與加密端不符，請檢查 Alice 端顯示的 Sx 是否與此處一致。")
